@@ -190,13 +190,42 @@ with col2:
     st.pyplot(fig_cm)
 
 st.markdown("""
-### 📘 Penjelasan Confusion Matrix
-- **TP (True Positive)** → Model benar memprediksi pasien **sakit** 
-- **TN (True Negative)** → Model benar memprediksi pasien **sehat** 
-- **FP (False Positive)** → Model salah memprediksi pasien sehat sebagai sakit 
-- **FN (False Negative)** → Model salah memprediksi pasien sakit sebagai sehat 
+### 📘 Penjelasan Confusion Matrix + Warna
+- **TP (True Positive)** → Model benar memprediksi pasien **sakit** (biasanya warna biru tua)
+- **TN (True Negative)** → Model benar memprediksi pasien **sehat** (biru muda)
+- **FP (False Positive)** → Model salah memprediksi pasien sehat sebagai sakit (sering terlihat lebih terang)
+- **FN (False Negative)** → Model salah memprediksi pasien sakit sebagai sehat (warna terang, sangat penting di medis)
 - **FN paling kritis**, karena pasien sakit bisa tidak terdeteksi.
 """)
+
+st.divider()
+
+# ============================================================
+# FEATURE IMPORTANCE
+# ============================================================
+if hasattr(model, "feature_importances_"):
+    st.subheader("📌 Feature Importance")
+
+    colA, colB = st.columns([1,1])
+
+    with colA:
+        importances = pd.Series(model.feature_importances_, index=X.columns)
+        importances = importances.sort_values(ascending=True)
+
+        fig_imp, ax_imp = plt.subplots(figsize=(3,4))
+        importances.plot(kind="barh", ax=ax_imp, color="teal")
+        ax_imp.set_title("Feature Importance")
+        st.pyplot(fig_imp)
+
+    with colB:
+        st.markdown("""
+        ### 📘 Penjelasan Feature Importance
+        - Menunjukkan fitur mana yang paling berpengaruh dalam prediksi.
+        - Semakin panjang batang → semakin besar kontribusi fitur.
+        - Model pohon menghitung pentingnya fitur berdasarkan:
+          - Seberapa sering fitur digunakan untuk split
+          - Seberapa besar fitur mengurangi impurity
+        """)
 
 st.divider()
 
