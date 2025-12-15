@@ -20,38 +20,40 @@ from sklearn.ensemble import RandomForestClassifier
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Online Shopper Purchasing Intention",
-    page_icon="🛒",
+    page_title="Telco Customer Churn",
+    page_icon="📱",
     layout="wide"
 )
 
 # ============================================================
 # HEADER
 # ============================================================
-st.markdown("<h1 style='text-align:center;'>🛒 Online Shopper Purchasing Intention</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>📱 Telco Customer Churn Prediction</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center;'>Decision Tree & Random Forest | Data Mining Project</p>", unsafe_allow_html=True)
 st.divider()
 
 # ============================================================
 # LOAD DATASET
 # ============================================================
-DATA_PATH = "online_shoppers_intention.csv"
+DATA_PATH = "Dataset Telco-Customer-Churn.csv"
 
 if not os.path.exists(DATA_PATH):
-    st.error("❌ Dataset online_shoppers_intention.csv tidak ditemukan.")
+    st.error("❌ Dataset tidak ditemukan.")
     st.stop()
 
 df = pd.read_csv(DATA_PATH)
 st.success("✅ Dataset berhasil dimuat")
 
 # ============================================================
-# TARGET → Revenue (1 = beli, 0 = tidak beli)
+# FIX TARGET → BINARY
 # ============================================================
-df["Revenue"] = df["Revenue"].astype(int)
+df["Churn"] = df["Churn"].map({"Yes": 1, "No": 0})
 
 # ============================================================
-# HANDLE MISSING VALUE
+# HANDLE MISSING VALUE & NUMERIC CONVERSION
 # ============================================================
+df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+df = df.fillna(df.median(numeric_only=True))
 df = df.fillna(df.mode().iloc[0])
 
 # ============================================================
@@ -77,19 +79,20 @@ with col2:
 st.divider()
 
 # ============================================================
-# TARGET DISTRIBUTION
+# TARGET VARIABLE
 # ============================================================
-st.subheader("🎯 2. Distribusi Target (Revenue)")
+st.subheader("🎯 2. Target Variable")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.dataframe(df["Revenue"].value_counts())
+    st.markdown("**Distribusi Target (Churn)**")
+    st.dataframe(df["Churn"].value_counts())
 
 with col2:
     fig, ax = plt.subplots(figsize=(3.5,2.5))
-    df["Revenue"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
-    ax.set_xlabel("Revenue (0 = Tidak Beli, 1 = Beli)")
+    df["Churn"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
+    ax.set_xlabel("Churn")
     ax.set_ylabel("Jumlah")
     st.pyplot(fig)
 
@@ -100,14 +103,12 @@ st.divider()
 # ============================================================
 st.subheader("⚙️ 3. Preprocessing Data")
 
-df_proc = df.copy()
+df_proc = df.drop(columns=["customerID"], errors="ignore")
+df_proc = df_proc.replace({"Yes": 1, "No": 0})
+df_proc = pd.get_dummies(df_proc, drop_first=True)
 
-# One-hot encoding untuk fitur kategorikal
-categorical_cols = df_proc.select_dtypes(include=["object", "bool"]).columns
-df_proc = pd.get_dummies(df_proc, columns=categorical_cols, drop_first=True)
-
-X = df_proc.drop(columns=["Revenue"])
-y = df_proc["Revenue"]
+X = df_proc.drop(columns=["Churn"])
+y = df_proc["Churn"]
 
 st.write("🔍 Kolom fitur yang digunakan untuk prediksi:")
 st.write(list(X.columns))
@@ -183,10 +184,11 @@ with col2:
 
 st.markdown("""
 ### 📘 Penjelasan Confusion Matrix
-- **TP** → Model benar memprediksi pembelian  
-- **TN** → Model benar memprediksi tidak membeli  
-- **FP** → Tidak beli diprediksi sebagai beli  
-- **FN** → Beli diprediksi sebagai tidak beli  
+- **TP (True Positive)** → Model benar memprediksi pelanggan **churn**
+- **TN (True Negative)** → Model benar memprediksi pelanggan **tidak churn**
+- **FP (False Positive)** → Model salah memprediksi pelanggan tidak churn sebagai churn
+- **FN (False Negative)** → Model salah memprediksi pelanggan churn sebagai tidak churn
+- FN penting karena pelanggan yang akan pergi bisa tidak terdeteksi.
 """)
 
 st.divider()
@@ -197,11 +199,26 @@ st.divider()
 if hasattr(model, "feature_importances_"):
     st.subheader("📌 Feature Importance")
 
-    fig_imp, ax_imp = plt.subplots(figsize=(4,3))
-    importances = pd.Series(model.feature_importances_, index=X.columns)
-    importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
-    ax_imp.set_title("Feature Importance")
-    st.pyplot(fig_imp)
+    colA, colB = st.columns([1,1])
+
+    with colA:
+        importances = pd.Series(model.feature_importances_, index=X.columns)
+        importances = importances.sort_values(ascending=True)
+
+        fig_imp, ax_imp = plt.subplots(figsize=(3,4))
+        importances.plot(kind="barh", ax=ax_imp, color="teal")
+        ax_imp.set_title("Feature Importance")
+        st.pyplot(fig_imp)
+
+    with colB:
+        st.markdown("""
+        ### 📘 Penjelasan Feature Importance
+        - Menunjukkan fitur mana yang paling berpengaruh dalam prediksi churn.
+        - Semakin panjang batang → semakin besar kontribusi fitur.
+        - Model pohon menghitung pentingnya fitur berdasarkan:
+          - Seberapa sering fitur digunakan untuk split
+          - Seberapa besar fitur mengurangi impurity
+        """)
 
 st.divider()
 
@@ -210,17 +227,35 @@ st.divider()
 # ============================================================
 st.subheader("📈 Precision-Recall Curve")
 
-y_scores = model.predict_proba(X_test)[:, 1]
+if hasattr(model, "predict_proba"):
+    y_scores = model.predict_proba(X_test)[:, 1]
+else:
+    y_scores = model.predict(X_test)
+
 precision, recall, thresholds = precision_recall_curve(y_test, y_scores)
 avg_precision = average_precision_score(y_test, y_scores)
 
-fig_pr, ax_pr = plt.subplots(figsize=(4,3))
-ax_pr.plot(recall, precision, color="purple", linewidth=2)
-ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
-ax_pr.set_xlabel("Recall")
-ax_pr.set_ylabel("Precision")
-ax_pr.grid(True)
-st.pyplot(fig_pr)
+colP, colQ = st.columns([1,1])
+
+with colP:
+    fig_pr, ax_pr = plt.subplots(figsize=(3,3))
+    ax_pr.plot(recall, precision, color="purple", linewidth=2)
+    ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
+    ax_pr.set_xlabel("Recall")
+    ax_pr.set_ylabel("Precision")
+    ax_pr.grid(True)
+    st.pyplot(fig_pr)
+
+with colQ:
+    st.markdown("""
+    ### 📘 Penjelasan Precision‑Recall Curve
+    - Cocok untuk dataset **imbalanced** seperti churn.
+    - **Precision** → Akurasi prediksi pelanggan churn.
+    - **Recall** → Kemampuan menemukan pelanggan churn.
+    - **AP (Average Precision)**:
+      - Mendekati 1 → model sangat baik
+      - Mendekati 0.5 → model biasa saja
+    """)
 
 st.divider()
 
@@ -230,4 +265,3 @@ st.divider()
 st.markdown(
     "<p style='text-align:center;font-size:12px;'>Data Mining Project | Streamlit</p>",
     unsafe_allow_html=True
-)
