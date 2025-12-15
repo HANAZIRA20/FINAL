@@ -55,6 +55,23 @@ df["label"] = df["type"].map({"Movie": 1, "TV Show": 0})
 df = df.fillna("Unknown")
 
 # ============================================================
+# FEATURE ENGINEERING (AMAN, TANPA LEAKAGE)
+# ============================================================
+df["description_length"] = df["description"].apply(lambda x: len(str(x)))
+df["num_genres"] = df["listed_in"].apply(lambda x: len(str(x).split(",")))
+df["num_countries"] = df["country"].apply(lambda x: len(str(x).split(",")))
+
+# Fitur aman
+features = [
+    "release_year",
+    "description_length",
+    "num_genres",
+    "num_countries"
+]
+
+df_proc = df[features + ["label"]]
+
+# ============================================================
 # DATA OVERVIEW
 # ============================================================
 st.subheader("📊 1. Data Overview")
@@ -63,13 +80,13 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**5 Data Teratas**")
-    st.dataframe(df.head(), use_container_width=True)
+    st.dataframe(df_proc.head(), use_container_width=True)
 
 with col2:
     info_df = pd.DataFrame({
-        "Kolom": df.columns,
-        "Tipe Data": df.dtypes.astype(str),
-        "Missing": df.isnull().sum()
+        "Kolom": df_proc.columns,
+        "Tipe Data": df_proc.dtypes.astype(str),
+        "Missing": df_proc.isnull().sum()
     })
     st.markdown("**Informasi Dataset**")
     st.dataframe(info_df, use_container_width=True)
@@ -96,34 +113,11 @@ with col2:
 st.divider()
 
 # ============================================================
-# PREPROCESSING
+# SPLIT DATA
 # ============================================================
-st.subheader("⚙️ 3. Preprocessing Data")
-
-df_proc = df.copy()
-
-# Pilih fitur yang relevan
-features = ["release_year", "rating", "duration", "listed_in", "country"]
-df_proc = df_proc[features + ["label"]]
-
-# Convert duration → angka
-df_proc["duration"] = df_proc["duration"].str.extract("(\d+)").astype(float)
-
-# One-hot encoding untuk fitur kategorikal
-df_proc = pd.get_dummies(df_proc, drop_first=True)
-
 X = df_proc.drop(columns=["label"])
 y = df_proc["label"]
 
-st.write("🔍 Kolom fitur yang digunakan untuk prediksi:")
-st.write(list(X.columns))
-
-st.success("✅ Preprocessing selesai")
-st.divider()
-
-# ============================================================
-# SPLIT DATA
-# ============================================================
 X_train, X_test, y_train, y_test = train_test_split(
     X, y,
     test_size=0.2,
@@ -131,7 +125,7 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
-st.subheader("📂 4. Pembagian Data")
+st.subheader("📂 3. Pembagian Data")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -165,7 +159,7 @@ acc = accuracy_score(y_test, y_pred)
 # ============================================================
 # EVALUASI MODEL
 # ============================================================
-st.subheader("🤖 5. Evaluasi Model")
+st.subheader("🤖 4. Evaluasi Model")
 
 col1, col2 = st.columns(2)
 
@@ -187,14 +181,6 @@ with col2:
     ax_cm.set_title("Confusion Matrix")
     st.pyplot(fig_cm)
 
-st.markdown("""
-### 📘 Penjelasan Confusion Matrix
-- **TP** → Model benar memprediksi Movie  
-- **TN** → Model benar memprediksi TV Show  
-- **FP** → TV Show diprediksi sebagai Movie  
-- **FN** → Movie diprediksi sebagai TV Show  
-""")
-
 st.divider()
 
 # ============================================================
@@ -203,23 +189,11 @@ st.divider()
 if hasattr(model, "feature_importances_"):
     st.subheader("📌 Feature Importance")
 
-    colA, colB = st.columns([1,1])
-
-    with colA:
-        importances = pd.Series(model.feature_importances_, index=X.columns)
-        importances = importances.sort_values(ascending=True)
-
-        fig_imp, ax_imp = plt.subplots(figsize=(3,4))
-        importances.plot(kind="barh", ax=ax_imp, color="teal")
-        ax_imp.set_title("Feature Importance")
-        st.pyplot(fig_imp)
-
-    with colB:
-        st.markdown("""
-        ### 📘 Penjelasan Feature Importance
-        - Menunjukkan fitur mana yang paling berpengaruh dalam prediksi.
-        - Biasanya: duration, release_year, rating.
-        """)
+    fig_imp, ax_imp = plt.subplots(figsize=(4,3))
+    importances = pd.Series(model.feature_importances_, index=X.columns)
+    importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
+    ax_imp.set_title("Feature Importance")
+    st.pyplot(fig_imp)
 
 st.divider()
 
@@ -228,32 +202,17 @@ st.divider()
 # ============================================================
 st.subheader("📈 Precision-Recall Curve")
 
-if hasattr(model, "predict_proba"):
-    y_scores = model.predict_proba(X_test)[:, 1]
-else:
-    y_scores = model.predict(X_test)
-
+y_scores = model.predict_proba(X_test)[:, 1]
 precision, recall, thresholds = precision_recall_curve(y_test, y_scores)
 avg_precision = average_precision_score(y_test, y_scores)
 
-colP, colQ = st.columns([1,1])
-
-with colP:
-    fig_pr, ax_pr = plt.subplots(figsize=(3,3))
-    ax_pr.plot(recall, precision, color="purple", linewidth=2)
-    ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
-    ax_pr.set_xlabel("Recall")
-    ax_pr.set_ylabel("Precision")
-    ax_pr.grid(True)
-    st.pyplot(fig_pr)
-
-with colQ:
-    st.markdown("""
-    ### 📘 Penjelasan Precision‑Recall Curve
-    - Cocok untuk dataset dengan dua kelas.
-    - **Precision** → Akurasi prediksi Movie.
-    - **Recall** → Kemampuan menemukan Movie.
-    """)
+fig_pr, ax_pr = plt.subplots(figsize=(4,3))
+ax_pr.plot(recall, precision, color="purple", linewidth=2)
+ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
+ax_pr.set_xlabel("Recall")
+ax_pr.set_ylabel("Precision")
+ax_pr.grid(True)
+st.pyplot(fig_pr)
 
 st.divider()
 
