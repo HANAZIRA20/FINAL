@@ -97,35 +97,40 @@ else:
     model = RandomForestClassifier(random_state=42)
 
 model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-acc = accuracy_score(y_test, y_pred)
 
 # ============================================================
-# INPUT MANUAL UNTUK PREDIKSI (FIXED)
+# INPUT MANUAL (FORM)
 # ============================================================
-st.sidebar.header("📝 Input Manual Prediksi")
-
-user_input = {}
+st.subheader("📝 1. Input Manual untuk Prediksi")
 
 manual_cols = df_proc.drop(columns=["Churn"]).columns
+user_input = {}
 
-for col in manual_cols:
+col1, col2 = st.columns(2)
 
-    # Jika kategorikal (string)
-    if df_proc[col].dtype == "object":
-        user_input[col] = st.sidebar.selectbox(
-            col,
-            sorted(df_proc[col].astype(str).unique())
-        )
+with col1:
+    for col in manual_cols[:len(manual_cols)//2]:
+        if df_proc[col].dtype == "object":
+            user_input[col] = st.selectbox(col, sorted(df_proc[col].astype(str).unique()))
+        else:
+            user_input[col] = st.number_input(
+                col,
+                float(df_proc[col].min()),
+                float(df_proc[col].max()),
+                float(df_proc[col].mean())
+            )
 
-    # Jika numerik
-    else:
-        user_input[col] = st.sidebar.number_input(
-            col,
-            float(df_proc[col].min()),
-            float(df_proc[col].max()),
-            float(df_proc[col].mean())
-        )
+with col2:
+    for col in manual_cols[len(manual_cols)//2:]:
+        if df_proc[col].dtype == "object":
+            user_input[col] = st.selectbox(col, sorted(df_proc[col].astype(str).unique()))
+        else:
+            user_input[col] = st.number_input(
+                col,
+                float(df_proc[col].min()),
+                float(df_proc[col].max()),
+                float(df_proc[col].mean())
+            )
 
 # Convert ke DataFrame
 user_df = pd.DataFrame([user_input])
@@ -134,18 +139,29 @@ user_df = pd.DataFrame([user_input])
 user_encoded = pd.get_dummies(user_df)
 user_encoded = user_encoded.reindex(columns=model_columns, fill_value=0)
 
-# Prediksi manual
-manual_pred = model.predict(user_encoded)[0]
-manual_prob = model.predict_proba(user_encoded)[0][1]
+# ============================================================
+# TOMBOL PREDIKSI
+# ============================================================
+st.subheader("🎯 2. Hasil Prediksi")
 
-st.sidebar.subheader("📌 Hasil Prediksi Manual")
-st.sidebar.write("**Prediksi:**", "Churn" if manual_pred == 1 else "Tidak Churn")
-st.sidebar.write("**Probabilitas Churn:**", f"{manual_prob:.2f}")
+if st.button("🔍 Prediksi Sekarang"):
+    manual_pred = model.predict(user_encoded)[0]
+    manual_prob = model.predict_proba(user_encoded)[0][1]
+
+    if manual_pred == 1:
+        st.error(f"⚠️ Pelanggan diprediksi **CHURN** (Probabilitas: {manual_prob:.2f})")
+    else:
+        st.success(f"✅ Pelanggan diprediksi **TIDAK CHURN** (Probabilitas: {manual_prob:.2f})")
+
+st.divider()
 
 # ============================================================
 # EVALUASI MODEL
 # ============================================================
-st.subheader("🤖 5. Evaluasi Model")
+st.subheader("📊 3. Evaluasi Model")
+
+y_pred = model.predict(X_test)
+acc = accuracy_score(y_test, y_pred)
 
 col1, col2 = st.columns(2)
 
@@ -170,19 +186,18 @@ with col2:
 # ============================================================
 # FEATURE IMPORTANCE
 # ============================================================
-if hasattr(model, "feature_importances_"):
-    st.subheader("📌 Feature Importance")
+st.subheader("📌 4. Feature Importance")
 
-    fig_imp, ax_imp = plt.subplots(figsize=(4,3))
-    importances = pd.Series(model.feature_importances_, index=X.columns)
-    importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
-    ax_imp.set_title("Feature Importance")
-    st.pyplot(fig_imp)
+fig_imp, ax_imp = plt.subplots(figsize=(4,3))
+importances = pd.Series(model.feature_importances_, index=X.columns)
+importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
+ax_imp.set_title("Feature Importance")
+st.pyplot(fig_imp)
 
 # ============================================================
 # PRECISION-RECALL CURVE
 # ============================================================
-st.subheader("📈 Precision-Recall Curve")
+st.subheader("📈 5. Precision-Recall Curve")
 
 y_scores = model.predict_proba(X_test)[:, 1]
 precision, recall, thresholds = precision_recall_curve(y_test, y_scores)
