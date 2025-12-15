@@ -7,6 +7,7 @@ warnings.filterwarnings("ignore")
 import os
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -57,64 +58,18 @@ df = df.fillna(df.median(numeric_only=True))
 df = df.fillna(df.mode().iloc[0])
 
 # ============================================================
-# DATA OVERVIEW
-# ============================================================
-st.subheader("📊 1. Data Overview")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("**5 Data Teratas**")
-    st.dataframe(df.head(), use_container_width=True)
-
-with col2:
-    info_df = pd.DataFrame({
-        "Kolom": df.columns,
-        "Tipe Data": df.dtypes.astype(str),
-        "Missing": df.isnull().sum()
-    })
-    st.markdown("**Informasi Dataset**")
-    st.dataframe(info_df, use_container_width=True)
-
-st.divider()
-
-# ============================================================
-# TARGET VARIABLE
-# ============================================================
-st.subheader("🎯 2. Target Variable")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("**Distribusi Target (Churn)**")
-    st.dataframe(df["Churn"].value_counts())
-
-with col2:
-    fig, ax = plt.subplots(figsize=(3.5,2.5))
-    df["Churn"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
-    ax.set_xlabel("Churn")
-    ax.set_ylabel("Jumlah")
-    st.pyplot(fig)
-
-st.divider()
-
-# ============================================================
 # PREPROCESSING
 # ============================================================
-st.subheader("⚙️ 3. Preprocessing Data")
-
 df_proc = df.drop(columns=["customerID"], errors="ignore")
 df_proc = df_proc.replace({"Yes": 1, "No": 0})
-df_proc = pd.get_dummies(df_proc, drop_first=True)
 
-X = df_proc.drop(columns=["Churn"])
-y = df_proc["Churn"]
+df_encoded = pd.get_dummies(df_proc, drop_first=True)
 
-st.write("🔍 Kolom fitur yang digunakan untuk prediksi:")
-st.write(list(X.columns))
+X = df_encoded.drop(columns=["Churn"])
+y = df_encoded["Churn"]
 
-st.success("✅ Preprocessing selesai")
-st.divider()
+# Save columns for manual prediction
+model_columns = X.columns
 
 # ============================================================
 # SPLIT DATA
@@ -125,18 +80,6 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42,
     stratify=y
 )
-
-st.subheader("📂 4. Pembagian Data")
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Total Data", df_proc.shape[0])
-with col2:
-    st.metric("Data Training", X_train.shape[0])
-with col3:
-    st.metric("Data Testing", X_test.shape[0])
-
-st.divider()
 
 # ============================================================
 # MODEL SELECTION
@@ -156,6 +99,45 @@ else:
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
+
+# ============================================================
+# INPUT MANUAL UNTUK PREDIKSI
+# ============================================================
+st.sidebar.header("📝 Input Manual Prediksi")
+
+# Ambil kolom asli sebelum encoding
+manual_cols = df_proc.drop(columns=["Churn"]).columns
+
+user_input = {}
+
+for col in manual_cols:
+    if df_proc[col].dtype == "object":
+        user_input[col] = st.sidebar.selectbox(
+            col,
+            sorted(df_proc[col].unique())
+        )
+    else:
+        user_input[col] = st.sidebar.number_input(
+            col,
+            float(df_proc[col].min()),
+            float(df_proc[col].max()),
+            float(df_proc[col].mean())
+        )
+
+# Convert ke DataFrame
+user_df = pd.DataFrame([user_input])
+
+# Encode manual input agar cocok dengan model
+user_encoded = pd.get_dummies(user_df)
+user_encoded = user_encoded.reindex(columns=model_columns, fill_value=0)
+
+# Prediksi manual
+manual_pred = model.predict(user_encoded)[0]
+manual_prob = model.predict_proba(user_encoded)[0][1]
+
+st.sidebar.subheader("📌 Hasil Prediksi Manual")
+st.sidebar.write("**Prediksi:**", "Churn" if manual_pred == 1 else "Tidak Churn")
+st.sidebar.write("**Probabilitas Churn:**", f"{manual_prob:.2f}")
 
 # ============================================================
 # EVALUASI MODEL
@@ -182,82 +164,34 @@ with col2:
     ax_cm.set_title("Confusion Matrix")
     st.pyplot(fig_cm)
 
-st.markdown("""
-### 📘 Penjelasan Confusion Matrix
-- **TP (True Positive)** → Model benar memprediksi pelanggan **churn**
-- **TN (True Negative)** → Model benar memprediksi pelanggan **tidak churn**
-- **FP (False Positive)** → Model salah memprediksi pelanggan tidak churn sebagai churn
-- **FN (False Negative)** → Model salah memprediksi pelanggan churn sebagai tidak churn
-- FN penting karena pelanggan yang akan pergi bisa tidak terdeteksi.
-""")
-
-st.divider()
-
 # ============================================================
 # FEATURE IMPORTANCE
 # ============================================================
 if hasattr(model, "feature_importances_"):
     st.subheader("📌 Feature Importance")
 
-    colA, colB = st.columns([1,1])
-
-    with colA:
-        importances = pd.Series(model.feature_importances_, index=X.columns)
-        importances = importances.sort_values(ascending=True)
-
-        fig_imp, ax_imp = plt.subplots(figsize=(3,4))
-        importances.plot(kind="barh", ax=ax_imp, color="teal")
-        ax_imp.set_title("Feature Importance")
-        st.pyplot(fig_imp)
-
-    with colB:
-        st.markdown("""
-        ### 📘 Penjelasan Feature Importance
-        - Menunjukkan fitur mana yang paling berpengaruh dalam prediksi churn.
-        - Semakin panjang batang → semakin besar kontribusi fitur.
-        - Model pohon menghitung pentingnya fitur berdasarkan:
-          - Seberapa sering fitur digunakan untuk split
-          - Seberapa besar fitur mengurangi impurity
-        """)
-
-st.divider()
+    fig_imp, ax_imp = plt.subplots(figsize=(4,3))
+    importances = pd.Series(model.feature_importances_, index=X.columns)
+    importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
+    ax_imp.set_title("Feature Importance")
+    st.pyplot(fig_imp)
 
 # ============================================================
 # PRECISION-RECALL CURVE
 # ============================================================
 st.subheader("📈 Precision-Recall Curve")
 
-if hasattr(model, "predict_proba"):
-    y_scores = model.predict_proba(X_test)[:, 1]
-else:
-    y_scores = model.predict(X_test)
-
+y_scores = model.predict_proba(X_test)[:, 1]
 precision, recall, thresholds = precision_recall_curve(y_test, y_scores)
 avg_precision = average_precision_score(y_test, y_scores)
 
-colP, colQ = st.columns([1,1])
-
-with colP:
-    fig_pr, ax_pr = plt.subplots(figsize=(3,3))
-    ax_pr.plot(recall, precision, color="purple", linewidth=2)
-    ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
-    ax_pr.set_xlabel("Recall")
-    ax_pr.set_ylabel("Precision")
-    ax_pr.grid(True)
-    st.pyplot(fig_pr)
-
-with colQ:
-    st.markdown("""
-    ### 📘 Penjelasan Precision‑Recall Curve
-    - Cocok untuk dataset **imbalanced** seperti churn.
-    - **Precision** → Akurasi prediksi pelanggan churn.
-    - **Recall** → Kemampuan menemukan pelanggan churn.
-    - **AP (Average Precision)**:
-      - Mendekati 1 → model sangat baik
-      - Mendekati 0.5 → model biasa saja
-    """)
-
-st.divider()
+fig_pr, ax_pr = plt.subplots(figsize=(4,3))
+ax_pr.plot(recall, precision, color="purple", linewidth=2)
+ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
+ax_pr.set_xlabel("Recall")
+ax_pr.set_ylabel("Precision")
+ax_pr.grid(True)
+st.pyplot(fig_pr)
 
 # ============================================================
 # FOOTER
