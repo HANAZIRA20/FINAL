@@ -107,19 +107,18 @@ st.sidebar.header("📝 Input Manual Prediksi")
 
 user_input = {}
 
-# Ambil kolom asli sebelum encoding
 manual_cols = df_proc.drop(columns=["Churn"]).columns
 
 for col in manual_cols:
 
-    # Jika kolom kategorikal (berisi string)
+    # Jika kategorikal (string)
     if df_proc[col].dtype == "object":
         user_input[col] = st.sidebar.selectbox(
             col,
             sorted(df_proc[col].astype(str).unique())
         )
 
-    # Jika kolom numerik
+    # Jika numerik
     else:
         user_input[col] = st.sidebar.number_input(
             col,
@@ -133,8 +132,6 @@ user_df = pd.DataFrame([user_input])
 
 # Encode manual input agar cocok dengan model
 user_encoded = pd.get_dummies(user_df)
-
-# Reindex agar kolom sama dengan model
 user_encoded = user_encoded.reindex(columns=model_columns, fill_value=0)
 
 # Prediksi manual
@@ -144,7 +141,6 @@ manual_prob = model.predict_proba(user_encoded)[0][1]
 st.sidebar.subheader("📌 Hasil Prediksi Manual")
 st.sidebar.write("**Prediksi:**", "Churn" if manual_pred == 1 else "Tidak Churn")
 st.sidebar.write("**Probabilitas Churn:**", f"{manual_prob:.2f}")
-
 
 # ============================================================
 # EVALUASI MODEL
