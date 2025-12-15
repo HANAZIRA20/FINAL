@@ -20,56 +20,39 @@ from sklearn.ensemble import RandomForestClassifier
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Netflix Movie vs TV Show Classification",
-    page_icon="🎬",
+    page_title="Online Shopper Purchasing Intention",
+    page_icon="🛒",
     layout="wide"
 )
 
 # ============================================================
 # HEADER
 # ============================================================
-st.markdown("<h1 style='text-align:center;'>🎬 Netflix Movie vs TV Show Classification</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>🛒 Online Shopper Purchasing Intention</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center;'>Decision Tree & Random Forest | Data Mining Project</p>", unsafe_allow_html=True)
 st.divider()
 
 # ============================================================
 # LOAD DATASET
 # ============================================================
-DATA_PATH = "netflix_titles.csv"
+DATA_PATH = "online_shoppers_intention.csv"
 
 if not os.path.exists(DATA_PATH):
-    st.error("❌ Dataset netflix_titles.csv tidak ditemukan.")
+    st.error("❌ Dataset online_shoppers_intention.csv tidak ditemukan.")
     st.stop()
 
 df = pd.read_csv(DATA_PATH)
 st.success("✅ Dataset berhasil dimuat")
 
 # ============================================================
-# TARGET → MOVIE (1) VS TV SHOW (0)
+# TARGET → Revenue (1 = beli, 0 = tidak beli)
 # ============================================================
-df["label"] = df["type"].map({"Movie": 1, "TV Show": 0})
+df["Revenue"] = df["Revenue"].astype(int)
 
 # ============================================================
 # HANDLE MISSING VALUE
 # ============================================================
-df = df.fillna("Unknown")
-
-# ============================================================
-# FEATURE ENGINEERING (AMAN, TANPA LEAKAGE)
-# ============================================================
-df["description_length"] = df["description"].apply(lambda x: len(str(x)))
-df["num_genres"] = df["listed_in"].apply(lambda x: len(str(x).split(",")))
-df["num_countries"] = df["country"].apply(lambda x: len(str(x).split(",")))
-
-# Fitur aman
-features = [
-    "release_year",
-    "description_length",
-    "num_genres",
-    "num_countries"
-]
-
-df_proc = df[features + ["label"]]
+df = df.fillna(df.mode().iloc[0])
 
 # ============================================================
 # DATA OVERVIEW
@@ -80,13 +63,13 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**5 Data Teratas**")
-    st.dataframe(df_proc.head(), use_container_width=True)
+    st.dataframe(df.head(), use_container_width=True)
 
 with col2:
     info_df = pd.DataFrame({
-        "Kolom": df_proc.columns,
-        "Tipe Data": df_proc.dtypes.astype(str),
-        "Missing": df_proc.isnull().sum()
+        "Kolom": df.columns,
+        "Tipe Data": df.dtypes.astype(str),
+        "Missing": df.isnull().sum()
     })
     st.markdown("**Informasi Dataset**")
     st.dataframe(info_df, use_container_width=True)
@@ -96,28 +79,45 @@ st.divider()
 # ============================================================
 # TARGET DISTRIBUTION
 # ============================================================
-st.subheader("🎯 2. Distribusi Target (Movie vs TV Show)")
+st.subheader("🎯 2. Distribusi Target (Revenue)")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.dataframe(df["label"].value_counts())
+    st.dataframe(df["Revenue"].value_counts())
 
 with col2:
     fig, ax = plt.subplots(figsize=(3.5,2.5))
-    df["label"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
-    ax.set_xlabel("Label (0 = TV Show, 1 = Movie)")
+    df["Revenue"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
+    ax.set_xlabel("Revenue (0 = Tidak Beli, 1 = Beli)")
     ax.set_ylabel("Jumlah")
     st.pyplot(fig)
 
 st.divider()
 
 # ============================================================
+# PREPROCESSING
+# ============================================================
+st.subheader("⚙️ 3. Preprocessing Data")
+
+df_proc = df.copy()
+
+# One-hot encoding untuk fitur kategorikal
+categorical_cols = df_proc.select_dtypes(include=["object", "bool"]).columns
+df_proc = pd.get_dummies(df_proc, columns=categorical_cols, drop_first=True)
+
+X = df_proc.drop(columns=["Revenue"])
+y = df_proc["Revenue"]
+
+st.write("🔍 Kolom fitur yang digunakan untuk prediksi:")
+st.write(list(X.columns))
+
+st.success("✅ Preprocessing selesai")
+st.divider()
+
+# ============================================================
 # SPLIT DATA
 # ============================================================
-X = df_proc.drop(columns=["label"])
-y = df_proc["label"]
-
 X_train, X_test, y_train, y_test = train_test_split(
     X, y,
     test_size=0.2,
@@ -125,7 +125,7 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
-st.subheader("📂 3. Pembagian Data")
+st.subheader("📂 4. Pembagian Data")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -159,7 +159,7 @@ acc = accuracy_score(y_test, y_pred)
 # ============================================================
 # EVALUASI MODEL
 # ============================================================
-st.subheader("🤖 4. Evaluasi Model")
+st.subheader("🤖 5. Evaluasi Model")
 
 col1, col2 = st.columns(2)
 
@@ -180,6 +180,14 @@ with col2:
     ax_cm.set_ylabel("Actual")
     ax_cm.set_title("Confusion Matrix")
     st.pyplot(fig_cm)
+
+st.markdown("""
+### 📘 Penjelasan Confusion Matrix
+- **TP** → Model benar memprediksi pembelian  
+- **TN** → Model benar memprediksi tidak membeli  
+- **FP** → Tidak beli diprediksi sebagai beli  
+- **FN** → Beli diprediksi sebagai tidak beli  
+""")
 
 st.divider()
 
