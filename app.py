@@ -262,6 +262,8 @@ st.divider()
 # ============================================================
 # FOOTER
 # ============================================================
+st.divider()
 st.markdown(
     "<p style='text-align:center;font-size:12px;'>Data Mining Project | Streamlit</p>",
     unsafe_allow_html=True
+)
