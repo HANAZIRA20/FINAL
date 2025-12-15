@@ -13,7 +13,6 @@ import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.metrics import precision_recall_curve, average_precision_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 
@@ -58,8 +57,52 @@ df = df.fillna(df.median(numeric_only=True))
 df = df.fillna(df.mode().iloc[0])
 
 # ============================================================
+# DATA OVERVIEW
+# ============================================================
+st.subheader("📊 1. Data Overview")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**5 Data Teratas**")
+    st.dataframe(df.head(), use_container_width=True)
+
+with col2:
+    info_df = pd.DataFrame({
+        "Kolom": df.columns,
+        "Tipe Data": df.dtypes.astype(str),
+        "Missing": df.isnull().sum()
+    })
+    st.markdown("**Informasi Dataset**")
+    st.dataframe(info_df, use_container_width=True)
+
+st.divider()
+
+# ============================================================
+# TARGET VARIABLE
+# ============================================================
+st.subheader("🎯 2. Target Variable (Churn)")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**Distribusi Target**")
+    st.dataframe(df["Churn"].value_counts())
+
+with col2:
+    fig, ax = plt.subplots(figsize=(3.5,2.5))
+    df["Churn"].value_counts().plot(kind="bar", ax=ax, color=["green", "red"])
+    ax.set_xlabel("Churn (0 = Tidak Churn, 1 = Churn)")
+    ax.set_ylabel("Jumlah")
+    st.pyplot(fig)
+
+st.divider()
+
+# ============================================================
 # PREPROCESSING
 # ============================================================
+st.subheader("⚙️ 3. Preprocessing Data")
+
 df_proc = df.drop(columns=["customerID"], errors="ignore")
 df_proc = df_proc.replace({"Yes": 1, "No": 0})
 
@@ -68,8 +111,11 @@ df_encoded = pd.get_dummies(df_proc, drop_first=True)
 X = df_encoded.drop(columns=["Churn"])
 y = df_encoded["Churn"]
 
-# Save columns for manual prediction
-model_columns = X.columns
+st.write("🔍 Kolom fitur yang digunakan untuk prediksi:")
+st.write(list(X.columns))
+
+st.success("✅ Preprocessing selesai")
+st.divider()
 
 # ============================================================
 # SPLIT DATA
@@ -80,6 +126,19 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42,
     stratify=y
 )
+
+st.subheader("📂 4. Pembagian Data")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Total Data", df_proc.shape[0])
+with col2:
+    st.metric("Data Training", X_train.shape[0])
+with col3:
+    st.metric("Data Testing", X_test.shape[0])
+
+st.markdown("**Rasio:** 80% Training – 20% Testing")
+st.divider()
 
 # ============================================================
 # MODEL SELECTION
@@ -101,7 +160,7 @@ model.fit(X_train, y_train)
 # ============================================================
 # INPUT MANUAL (FORM)
 # ============================================================
-st.subheader("📝 1. Input Manual untuk Prediksi")
+st.subheader("📝 5. Input Manual untuk Prediksi")
 
 manual_cols = df_proc.drop(columns=["Churn"]).columns
 user_input = {}
@@ -111,7 +170,8 @@ col1, col2 = st.columns(2)
 with col1:
     for col in manual_cols[:len(manual_cols)//2]:
         if df_proc[col].dtype == "object":
-            user_input[col] = st.selectbox(col, sorted(df_proc[col].astype(str).unique()))
+            options = df_proc[col].astype(str).unique().tolist()
+            user_input[col] = st.selectbox(col, options)
         else:
             user_input[col] = st.number_input(
                 col,
@@ -123,7 +183,8 @@ with col1:
 with col2:
     for col in manual_cols[len(manual_cols)//2:]:
         if df_proc[col].dtype == "object":
-            user_input[col] = st.selectbox(col, sorted(df_proc[col].astype(str).unique()))
+            options = df_proc[col].astype(str).unique().tolist()
+            user_input[col] = st.selectbox(col, options)
         else:
             user_input[col] = st.number_input(
                 col,
@@ -132,17 +193,11 @@ with col2:
                 float(df_proc[col].mean())
             )
 
-# Convert ke DataFrame
 user_df = pd.DataFrame([user_input])
-
-# Encode manual input agar cocok dengan model
 user_encoded = pd.get_dummies(user_df)
-user_encoded = user_encoded.reindex(columns=model_columns, fill_value=0)
+user_encoded = user_encoded.reindex(columns=X.columns, fill_value=0)
 
-# ============================================================
-# TOMBOL PREDIKSI
-# ============================================================
-st.subheader("🎯 2. Hasil Prediksi")
+st.subheader("🎯 6. Hasil Prediksi")
 
 if st.button("🔍 Prediksi Sekarang"):
     manual_pred = model.predict(user_encoded)[0]
@@ -158,7 +213,7 @@ st.divider()
 # ============================================================
 # EVALUASI MODEL
 # ============================================================
-st.subheader("📊 3. Evaluasi Model")
+st.subheader("📊 7. Evaluasi Model")
 
 y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
@@ -183,33 +238,18 @@ with col2:
     ax_cm.set_title("Confusion Matrix")
     st.pyplot(fig_cm)
 
+st.divider()
+
 # ============================================================
 # FEATURE IMPORTANCE
 # ============================================================
-st.subheader("📌 4. Feature Importance")
+st.subheader("📌 8. Feature Importance")
 
 fig_imp, ax_imp = plt.subplots(figsize=(4,3))
 importances = pd.Series(model.feature_importances_, index=X.columns)
 importances.sort_values().plot(kind="barh", ax=ax_imp, color="teal")
 ax_imp.set_title("Feature Importance")
 st.pyplot(fig_imp)
-
-# ============================================================
-# PRECISION-RECALL CURVE
-# ============================================================
-st.subheader("📈 5. Precision-Recall Curve")
-
-y_scores = model.predict_proba(X_test)[:, 1]
-precision, recall, thresholds = precision_recall_curve(y_test, y_scores)
-avg_precision = average_precision_score(y_test, y_scores)
-
-fig_pr, ax_pr = plt.subplots(figsize=(4,3))
-ax_pr.plot(recall, precision, color="purple", linewidth=2)
-ax_pr.set_title(f"PR Curve (AP = {avg_precision:.2f})")
-ax_pr.set_xlabel("Recall")
-ax_pr.set_ylabel("Precision")
-ax_pr.grid(True)
-st.pyplot(fig_pr)
 
 # ============================================================
 # FOOTER
